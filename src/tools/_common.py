@@ -61,7 +61,7 @@ _EMBED_WARN = (
 
 # --- 桶与配额默认值 ---
 _DEFAULT_MAX_BUCKET_BYTES = 50 * 1024  # 50 KB 单桶上限（超过建议走 grow 拆存）
-_DEFAULT_MAX_PINNED = 20               # pinned 桶上限（哲学边界：重要必须稀缺）；与 config.example.yaml limits.max_pinned 同步
+_DEFAULT_MAX_PINNED = 30               # pinned 桶上限（哲学边界：重要必须稀缺）；与 config.example.yaml limits.max_pinned 同步
 _DEFAULT_MAX_PROTECTED = 20            # protected 桶独立上限；与 config.example.yaml limits.max_protected 同步
 _DEFAULT_MAX_GROW_INPUT_BYTES = 2 * 1024 * 1024
 _DEFAULT_MAX_QUERY_BYTES = 16 * 1024
