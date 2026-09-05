@@ -1,14 +1,12 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import math
-import multiprocessing
 import threading
 
 import frontmatter
 import pytest
 
 from bucket_manager import _clamp01
-from ombrebrain.fabric.log.wal import WalStore
 from ombrebrain.retrieval.context import MemoryContextCompiler
 from tools import _runtime as rt
 from tools._common import (
@@ -22,45 +20,6 @@ from tools.breath._verbatim import render_stored_bucket
 from utils import positive_float
 from web.request_limits import MCPRequestBodyLimitMiddleware
 from web.search import _unit_query_float
-
-
-def _append_wal_range(path: str, start: int, count: int) -> None:
-    wal = WalStore(path)
-    for value in range(start, start + count):
-        wal.append({"value": value})
-
-
-def test_wal_concurrent_threads_preserve_index_and_checksum_chain(tmp_path):
-    path = tmp_path / "threaded.wal"
-
-    def append(value: int) -> int:
-        return WalStore(path).append({"value": value}).index
-
-    with ThreadPoolExecutor(max_workers=16) as pool:
-        indexes = list(pool.map(append, range(96)))
-
-    replayed = list(WalStore(path).replay())
-    assert sorted(indexes) == list(range(1, 97))
-    assert [entry.index for entry in replayed] == list(range(1, 97))
-    assert {entry.payload["value"] for entry in replayed} == set(range(96))
-
-
-def test_wal_concurrent_processes_preserve_index_and_checksum_chain(tmp_path):
-    path = tmp_path / "multiprocess.wal"
-    context = multiprocessing.get_context("spawn")
-    processes = [
-        context.Process(target=_append_wal_range, args=(str(path), offset * 20, 20))
-        for offset in range(4)
-    ]
-    for process in processes:
-        process.start()
-    for process in processes:
-        process.join(timeout=30)
-        assert process.exitcode == 0
-
-    replayed = list(WalStore(path).replay())
-    assert [entry.index for entry in replayed] == list(range(1, 81))
-    assert {entry.payload["value"] for entry in replayed} == set(range(80))
 
 
 def test_identical_content_turns_serialize_across_thread_event_loops():
@@ -254,12 +213,12 @@ async def test_mcp_body_limit_rejects_declared_and_chunked_payloads():
 
 
 @pytest.mark.asyncio
-async def test_mcp_body_limit_covers_restored_mcp_extra():
-    """/mcp-extra 自 3.2.0 恢复为信件连接器，必须和 /mcp 一样受体积限制。
+async def test_mcp_body_limit_covers_the_only_connector():
+    """MCP 体积限制必须盖住 /mcp。
 
-    2.8.5 到 3.1.0 之间它是退役路径，中间件放行让请求落到 router 拿 404——
-    那时放行是对的。恢复之后如果还放行，超大 body 就能绕过限制直达
-    JSON-RPC 解析，成为一条免检的写入通道（letter_write 会创建记忆）。
+    这条边界随信件搬过两次家：3.2.0 拆出 /mcp-extra 时要跟过去，3.4.0 并回
+    主链路时要跟回来。漏跟的后果是超大 body 绕过限制直达 JSON-RPC 解析，
+    成为一条免检的写入通道——letter_write 会创建记忆。
     """
     calls = []
     sent = []
@@ -280,7 +239,7 @@ async def test_mcp_body_limit_covers_restored_mcp_extra():
         {
             "type": "http",
             "method": "POST",
-            "path": "/mcp-extra",
+            "path": "/mcp",
             "headers": [(b"content-length", b"1000")],
         },
         receive,

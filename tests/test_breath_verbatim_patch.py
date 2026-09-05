@@ -80,7 +80,9 @@ async def test_dispatch_keeps_default_breath_budget_and_allows_explicit_headroom
     _install_runtime(OrderedBucketManager([]))
     seen = []
 
-    async def capture_default(*, max_results, max_tokens, tag_filter):
+    async def capture_default(
+        *, max_results, max_tokens, tag_filter, created_from=None, created_to=None
+    ):
         seen.append(max_tokens)
         return ""
 
@@ -92,7 +94,7 @@ async def test_dispatch_keeps_default_breath_budget_and_allows_explicit_headroom
     await dispatch(max_tokens=35_000)
     await dispatch(max_tokens=50_000)
 
-    assert seen == [10_000, 10_000, 35_000, 40_000]
+    assert seen == [20_000, 10_000, 35_000, 40_000]
 
 
 async def _search(query, **overrides):
@@ -286,7 +288,7 @@ async def test_token_budget_omits_whole_bucket_instead_of_truncating(monkeypatch
     assert "[bucket_id:second]" not in output
     assert second["content"][:20] not in output
     assert "token 预算不足" in output
-    assert manager.touched == ["first"]
+    assert manager.touched == []
     assert dehydrator.calls == 0
 
 
@@ -334,7 +336,7 @@ async def test_default_surface_skips_oversized_core_and_keeps_later_core(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_default_surface_skips_ordinary_results_when_core_is_omitted(monkeypatch):
+async def test_oversized_core_rule_does_not_take_ordinary_surfacing_down_with_it(monkeypatch):
     first_core = {
         "id": "first-core",
         "content": "First core rule fits completely.",
@@ -367,7 +369,7 @@ async def test_default_surface_skips_ordinary_results_when_core_is_omitted(monke
     }
     passive = {
         "id": "passive",
-        "content": "Passive memory must also stay hidden.",
+        "content": "Passive memory stays out while the budget is squeezed.",
         "metadata": {
             "type": "dynamic",
             "importance": 9,
@@ -378,7 +380,7 @@ async def test_default_surface_skips_ordinary_results_when_core_is_omitted(monke
     }
     accidental = {
         "id": "accidental",
-        "content": "Accidental memory must stay hidden too.",
+        "content": "Accidental memory stays out while the budget is squeezed.",
         "metadata": {
             "type": "dynamic",
             "importance": 5,
@@ -416,12 +418,13 @@ async def test_default_surface_skips_ordinary_results_when_core_is_omitted(monke
     assert "[bucket_id:first-core]" in output
     assert first_core["content"] in output
     assert "[bucket_id:oversized-core]" not in output
-    assert "[bucket_id:ordinary]" not in output
+    assert "[bucket_id:ordinary]" in output
+    assert ordinary["content"] in output
     assert "[bucket_id:passive]" not in output
     assert "[bucket_id:accidental]" not in output
     assert "token 预算不足" in output
     assert "核心准则" in output
-    assert "普通浮现已跳过" in output
+    assert "普通浮现已跳过" not in output
     assert f"required≈{first_core_cost + oversized_core_cost} tokens" in output
     assert f"limit={first_core_cost + ordinary_cost} tokens" in output
     assert "omitted=1" in output

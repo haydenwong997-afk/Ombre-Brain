@@ -40,6 +40,13 @@ tools/dream/output.py — dream 最终输出格式化
 ========================================
 """
 
+from ombrebrain.storage.attribution import (
+    known_person_names,
+    names_from_config,
+    render_third_party_block,
+    split_third_party_speech,
+)
+
 from .. import _runtime as rt
 from ..i import is_pending_candidate
 from ..plan.core import is_letter_bucket
@@ -62,9 +69,25 @@ def _bucket_data_block(
     content: str | None = None,
     footprint: str = "",
 ) -> str:
-    """渲染一条桶：前缀 + 清理过双链的正文 + 可选 footprint 行。"""
+    """渲染一条桶：前缀 + 清理过双链的正文 + 第三方发言块 + 可选 footprint 行。
+
+    第三方发言（`名字：内容`）与 breath 走同一套判定移出正文、另起一条 JSON，
+    理由见 `ombrebrain.storage.attribution`。dream 是全篇一起喂给模型自省的，
+    第三方的话混在自省材料里被当成用户的话，比在 breath 里错得更远。
+
+    `content` 传摘录时同样要拆——老 feel 的短摘录一样会包含第三方发言，
+    只对全文拆等于给截断路径留了个没有归属标记的出口。
+    """
     body = _content_of(bucket) if content is None else content
-    rendered = display_prefix + strip_wikilinks(body)
+    body, third_party = split_third_party_speech(
+        strip_wikilinks(body),
+        known_names=known_person_names(bucket),
+        **names_from_config(getattr(rt, "config", None)),
+    )
+    rendered = display_prefix + body
+    speech_block = render_third_party_block(third_party)
+    if speech_block:
+        rendered += f"\n{speech_block}"
     if footprint:
         rendered += f"\n{footprint}"
     return rendered
@@ -90,7 +113,9 @@ def _format_self_review(
     放不下时返回空串。
     """
     candidates = list(getattr(self_review, "candidates", None) or [])
-    if not candidates:
+    ready = list(getattr(self_review, "ready", None) or [])
+    starved = int(getattr(self_review, "starved", 0) or 0)
+    if not candidates and not ready:
         return "", []
 
     threshold = int(getattr(self_review, "threshold", 3) or 3)
@@ -173,14 +198,40 @@ def _format_self_review(
         else:
             omitted += 1
 
-    if not rendered:
+    omitted += starved
+
+    # 攒够见证的：压成一行，不给碰撞材料，也**不计见证**。
+    #
+    # 它们不需要再被见证——3/3 之后再见证一百次也不会有任何变化。需要的是
+    # 模型去做那个决定：promote 或者让它沉下去。给它们完整块只会把还缺见证的
+    # 候选挤出预算，那正是「新的一直转不正」的来源。
+    ready_lines: list[str] = []
+    for candidate in ready:
+        bucket = candidate.bucket
+        meta = bucket.get("metadata") or {}
+        created = str(meta.get("created") or "")[:10]
+        text = str(bucket.get("content") or "").strip().replace("\n", " ")[:60]
+        ready_lines.append(
+            f"- {bucket['id']} {created}（{len(candidate.passes or [])}/{threshold} 次）{text}"
+        )
+
+    if not rendered and not ready_lines:
         return "", []
 
-    section = prefix + "\n---\n".join(rendered)
+    section = prefix + "\n---\n".join(rendered) if rendered else ""
     if omitted:
-        notice = f"\n\n（另有 {omitted} 条待沉淀候选因 dream 总预算未展开，这次不计见证。）"
+        notice = f"\n\n（另有 {omitted} 条待沉淀候选这次没展开，不计见证。）"
         if count_tokens_approx(final_text + section + notice) <= dream_budget:
             section += notice
+    if ready_lines:
+        ready_block = (
+            "\n\n=== 这几条已经攒够见证，等你决定 ===\n"
+            f"够 {threshold} 次了，它们不会自己进 I。觉得站得住就 "
+            "I(promote=\"...\")；觉得不成立就别再确认，让它跟普通记忆一样沉下去。\n"
+            + "\n".join(ready_lines)
+        )
+        if count_tokens_approx(final_text + section + ready_block) <= dream_budget:
+            section += ready_block
     return section, rendered_ids
 
 
