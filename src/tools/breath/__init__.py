@@ -41,7 +41,7 @@ from ._date_range import parse_created_range
 from .catalog import surface_catalog
 from .feel import surface_feels
 from .importance import surface_by_importance
-from .surface import surface_default, surface_plans
+from .surface import surface_default, surface_plans, _BREATH_SAFETY_CAP
 from .search import surface_search
 
 
@@ -153,7 +153,7 @@ async def dispatch(
     if max_tokens <= 0:
         max_tokens = default_tokens
     max_results = min(max_results, 50)
-    max_tokens = min(max_tokens, 40000)
+    max_tokens = min(max_tokens, _BREATH_SAFETY_CAP)
     tag_filter = [t.strip() for t in tags.split(",") if t.strip()]
     memory_max_tokens = max_tokens
 
