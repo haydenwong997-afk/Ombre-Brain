@@ -54,7 +54,7 @@ _BUDGET_NOTICE = (
     "已返回正文均保持完整，未截断或摘要。"
     "当前约使用 {used}/{limit} token，如需被省略的整桶请提高 max_tokens 后重试。"
 )
-_BREATH_SAFETY_CAP = 43_000
+_BREATH_SAFETY_CAP = 47_000
 
 # 3.6.0 新近性配额：浮现区预留几个位置给近 N 天创建的桶。见 _apply_recency_quota。
 _RECENT_SLOTS_DEFAULT = 3
@@ -85,9 +85,9 @@ def _pin_budget_notice(*, required: int, limit: int, omitted: int) -> str:
         return (
             notice
             + "如需返回更多核心准则，可由用户明确提高 max_tokens / "
-            "surfacing.breath_max_tokens；当前版本最高 43000。"
+            "surfacing.breath_max_tokens；当前版本最高 47000。"
         )
-    return notice + "已达到当前版本 43000 token 安全上限；请精简或取消部分核心准则后重试。"
+    return notice + "已达到当前版本 47000 token 安全上限；请精简或取消部分核心准则后重试。"
 
 
 def _created_at(bucket: dict) -> datetime | None:
