@@ -470,7 +470,7 @@ def register(mcp) -> None:
             surfacing_payload = body.get("surfacing") or {}
             for key, low, high in (
                 ("breath_max_results", 1, 50),
-                ("breath_max_tokens", 500, 50000),
+                ("breath_max_tokens", 500, 60000),
                 ("feel_max_tokens", 500, 20000),
             ):
                 if key in surfacing_payload:
