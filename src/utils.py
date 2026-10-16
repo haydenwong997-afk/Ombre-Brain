@@ -1195,11 +1195,13 @@ def count_tokens_approx(text: str) -> int:
     if not text:
         return 0
     chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
+    english_letters = len(re.findall(r"[a-zA-Z]", text))
     english_words = len(re.findall(r"[a-zA-Z]+", text))
+    other_chars = len(text) - chinese_chars - english_letters
     return int(
         chinese_chars * _TOKEN_RATIO_PER_CN_CHAR
         + english_words * _TOKEN_RATIO_PER_EN_WORD
-        + len(text) * _TOKEN_RATIO_PER_CHAR
+        + other_chars * _TOKEN_RATIO_PER_CHAR
     )
 
 
