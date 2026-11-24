@@ -213,6 +213,13 @@ class DecayEngine:
             importance = max(1, min(10, int(metadata.get("importance", _DEFAULT_IMPORTANCE))))
         except (TypeError, ValueError):
             importance = _DEFAULT_IMPORTANCE
+
+        # --- High-importance buckets: importance ≥ 5 → never decay ---
+        # --- 高重要度桶：importance ≥ 5 不参与衰减，永不归档 ---
+        # 2026-11-24 Hayden 提出：遗忘是人类的事不是 AI 的事。
+        # 重要度 ≥ 5 的记忆即使长期未被召回也不应被归档。
+        if importance >= 5:
+            return _SCORE_PINNED
         activation_count = max(1.0, float(metadata.get("activation_count") or 1))
 
         # --- Days since last activation ---
