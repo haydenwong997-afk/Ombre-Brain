@@ -52,6 +52,9 @@ class BM25Index:
     def __init__(self):
         self._index = None          # BM25Okapi instance or None
         self._ids: list[str] = []
+        # memprobe 打点用：最近一次 build 的语料规模（bucket_manager.probe_memory 读取）
+        self._corpus_docs: int = 0
+        self._corpus_tokens: int = 0
 
     @property
     def available(self) -> bool:
@@ -80,6 +83,8 @@ class BM25Index:
         else:
             self._index = None
         self._ids = ids
+        self._corpus_docs = len(corpus)
+        self._corpus_tokens = sum(len(doc) for doc in corpus)
 
     def score(self, query: str) -> dict[str, float]:
         """返回 {bucket_id: normalized_bm25_score}，最高分 = 1.0，无命中返回 {}。"""

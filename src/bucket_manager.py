@@ -352,6 +352,11 @@ try:
 except ImportError:
     _BM25Index = None  # type: ignore
 
+try:
+    import memprobe as _memprobe
+except ImportError:
+    _memprobe = None  # type: ignore
+
 logger = logging.getLogger("ombre_brain.bucket")
 
 
@@ -1353,10 +1358,42 @@ class BucketManager:
             fresh = await asyncio.to_thread(self._build_bm25_index, buckets)
             self._bm25 = fresh          # 原子替换（单次赋值）
             self._bm25_dirty = False
+            self.probe_memory("bm25")
         except Exception as e:
             logger.warning(f"[bm25] 后台重建失败，保留旧索引: {e}")
         finally:
             self._bm25_rebuilding = False
+
+    # ---------------------------------------------------------
+    # OOM 定位打点（临时）：见 memprobe.py，定位完成后整体移除
+    # ---------------------------------------------------------
+    def probe_memory(self, source: str) -> None:
+        """在重建点把内存计数写入 <buckets_dir>/memprobe.csv，失败静默。"""
+        if _memprobe is None:
+            return
+        try:
+            buckets_total = 0
+            for subdir in (self.permanent_dir, self.dynamic_dir, self.archive_dir):
+                if not os.path.exists(subdir):
+                    continue
+                for _root, _dirs, files in os.walk(subdir):
+                    buckets_total += sum(1 for f in files if f.endswith(".md"))
+            bm25_docs = bm25_tokens = None
+            if self._bm25 is not None:
+                bm25_docs = getattr(self._bm25, "_corpus_docs", None)
+                bm25_tokens = getattr(self._bm25, "_corpus_tokens", None)
+            _memprobe.probe(
+                os.path.join(self.base_dir, "memprobe.csv"),
+                source,
+                active_cache_len=(
+                    len(self._active_cache) if self._active_cache is not None else None
+                ),
+                bm25_docs=bm25_docs,
+                bm25_tokens=bm25_tokens,
+                buckets_total=buckets_total,
+            )
+        except Exception:
+            pass
 
     # ---------------------------------------------------------
     # Create a new bucket
@@ -3766,6 +3803,8 @@ class BucketManager:
                     self._active_cache = [dict(bucket) for bucket in buckets]
                     self._active_file_state = state_after
                     self._last_file_state_check = time.monotonic()
+
+                self.probe_memory("active_cache")
 
                 if previous_cache is not None:
                     self._reconcile_external_changes(previous_cache, buckets)

@@ -389,6 +389,11 @@ class DecayEngine:
             "lowest_score": lowest_score if checked > 0 else 0,
         }
         logger.info(f"Decay cycle complete / 衰减周期完成: {result}")
+        # OOM 定位打点（临时）：衰减周期结束记一行，见 bucket_manager.probe_memory
+        try:
+            self.bucket_mgr.probe_memory("decay")
+        except Exception:
+            pass
         return result
 
     async def _self_heal_embeddings(self, buckets: list) -> int:
